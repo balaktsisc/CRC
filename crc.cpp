@@ -40,7 +40,7 @@ string bin(const int *num, int start, int end) {
  * one more bit is pulled down from the packet number (dividend) in the end of the remainder,
  * so as the remainder is long-enough (key_len). When packet's bits are all pulled down, the
  * remainder is the FCS.
- * @param data_len  The number of digits of the sending packet (bare data frame).
+ * Note: floor(log2l(x)) + 1 = bit length of int x.
  * @param key The pivot number for checks represented by array's elements (binary digits).
  * @param key_len The key-array length.
  * @param packet The transferred packet to be sent represented by array's elements (binary digits)
@@ -49,8 +49,8 @@ string bin(const int *num, int start, int end) {
  */
 int fcs_calc(const int *key, int key_len, const int *packet, int packet_len) {
     int r = dec(packet, packet_len), p = dec(key, key_len);
-    while(r >= p)
-        r = r ^ p << (int)(ceil(log2l(r)) - ceil(log2l(p)));
+    while(r && p && floor(log2l(r)) >= floor(log2l(p)))
+        r = r ^ p << (int)(floor(log2l(r)) - floor(log2l(p)));
     return r % (int) pow(2,key_len-1);
 }
 
@@ -85,7 +85,6 @@ int crc(int data_len, const int *key, int key_len, float ber, unsigned long long
         sender[i] = fcs % 2;
         fcs /= 2;
     }
-
     /* Creating the receiver message.
      * Copies the sender message with probabilistic certainty (uniform distribution); if a random float is less than BER,
      * then we consider the opposite binary digit to be transferred.
@@ -101,7 +100,6 @@ int crc(int data_len, const int *key, int key_len, float ber, unsigned long long
     }
 
     if(flag) counted_errors++;
-
     bool error = fcs_calc(key, key_len,receiver, packet_len) != 0;
 
 //    output << "MESSAGE: " << bin(sender,0,data_len) << "\tFCS: " << bin(sender,data_len,packet_len) << "\tERROR: " << (error ? "TRUE" : "FALSE") << endl;
@@ -117,16 +115,22 @@ int main() {
     ofstream messages;
     messages.open("Messages.txt");
     
-    int k = 20, p[6] = {1,0,0,1,1,1};
+    int k = 20, p[6] = {1,1,0,1,0,1};
     
-    unsigned long long test_cases = 1000000, detected_errors = 0, real_errors = 0;
+    unsigned long long test_cases = 10000000, detected_errors = 0, real_errors = 0;
     for(unsigned long long i = 0; i < test_cases; i++)
         detected_errors += crc(k,p,6,0.001,real_errors,messages);
 
     messages.close();
 
+    cout << "--- Number of transmitted packets: " << test_cases << " | P = " << bin(p,0,6) << " | Packet Length = " << k + 6 - 1 << endl;
     cout << "Errors detected: " << detected_errors << endl;
-    cout << "Errors occurred: " << real_errors << endl;
-    cout << "Success rate(%): " << (float) (detected_errors) / (float) (real_errors) * 100.0;
+    cout << "Errors produced: " << real_errors << endl;
+    cout << "Rate of produced errors totally: (%) " << (float) (real_errors) / (float) (test_cases) * 100.0 << endl;
+    cout << "Success rate of detection: (%) " << (float) (detected_errors) / (float) (real_errors) * 100.0 << endl;
+    cout << "Miss rate of detection: (%) " << (float) (real_errors-detected_errors) / (float) (real_errors) * 100.0 << endl;
+    cout << "Rate of detected errors totally: (%) " << (float) (detected_errors) / (float) (test_cases) * 100.0 << endl;
+    cout << "Rate of non-detected errors totally: (%) " << (float) (real_errors-detected_errors) / (float) (test_cases) * 100.0 << endl;
+    cout << "---";
     return 0;
 }
